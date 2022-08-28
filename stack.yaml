@@ -1,4 +1,4 @@
-resolver: lts-15.1     # 8.8.2  - base-4.13
+resolver: lts-15.1 # 8.8.2  - base-4.13
 # resolver: lts-14.27  # 8.6.5  - base-4.12
 # resolver: lts-12.26  # 8.4.4  - base-4.11
 # resolver: lts-11.22  # 8.2.2  - base-4.10
@@ -6,4 +6,7 @@ resolver: lts-15.1     # 8.8.2  - base-4.13
 # resolver: lts-6.35   # 7.10.3 - base-4.8
 
 extra-deps:
-  - direct-sqlite-2.3.26
+  # - direct-sqlcipher-2.3.26
+  # - ../direct-sqlcipher
+  - github: simplex-chat/direct-sqlcipher
+    commit: 11eff1abc98b58587d764d075acbb215eb13a444

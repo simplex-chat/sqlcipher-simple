@@ -1,23 +1,23 @@
-Name:                sqlite-simple
+Name:                sqlcipher-simple
 Version:             0.4.18.1
 Synopsis:            Mid-Level SQLite client library
 Description:
-    Mid-level SQLite client library, based on postgresql-simple.
+    Mid-level SQLCipher client library, forked from sqlite-simple.
     .
     Main documentation (with examples): <docs/Database-SQLite-Simple.html Database.SQLite.Simple>
     .
-    You can view the project page at <http://github.com/nurpax/sqlite-simple>
+    You can view the project page at <https://github.com/simplex-chat/sqlcipher-simple>
     for more information.
 
 License:             BSD3
 License-file:        LICENSE
 Author:              Bryan O'Sullivan, Leon P Smith, Janne Hellsten
-Maintainer:          Janne Hellsten <jjhellst@gmail.com>
+Maintainer:          Evgeny Poberezkin <ep@simplex.chat>
 Copyright:           (c) 2011 MailRank, Inc.,
                      (c) 2011-2012 Leon P Smith,
                      (c) 2012-2014 Janne Hellsten
-Homepage:            http://github.com/nurpax/sqlite-simple
-bug-reports:         http://github.com/nurpax/sqlite-simple/issues
+Homepage:            https://github.com/simplex-chat/sqlcipher-simple
+bug-reports:         https://github.com/simplex-chat/sqlcipher-simple/issues
 Stability:           stable
 Category:            Database
 Build-type:          Simple
@@ -50,7 +50,7 @@ Library
     blaze-textual,
     bytestring >= 0.9,
     containers,
-    direct-sqlite >= 2.3.13 && < 2.4,
+    direct-sqlcipher >= 2.3.13 && < 2.4,
     exceptions >= 0.4,
     template-haskell,
     text >= 0.11,
@@ -72,7 +72,7 @@ Library
 
 source-repository head
   type:     git
-  location: http://github.com/nurpax/sqlite-simple
+  location: http://github.com/simplex-chat/sqlcipher-simple
 
 
 test-suite test
@@ -107,7 +107,7 @@ test-suite test
                , base16-bytestring
                , bytestring >= 0.9
                , HUnit
-               , sqlite-simple
-               , direct-sqlite
+               , sqlcipher-simple
+               , direct-sqlcipher
                , text
                , time
