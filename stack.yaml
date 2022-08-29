@@ -9,4 +9,4 @@ extra-deps:
   # - direct-sqlcipher-2.3.26
   # - ../direct-sqlcipher
   - github: simplex-chat/direct-sqlcipher
-    commit: 11eff1abc98b58587d764d075acbb215eb13a444
+    commit: 355647880bede89afdeb5eb1ae237314db04a56a
