@@ -7,6 +7,6 @@ resolver: lts-15.1 # 8.8.2  - base-4.13
 
 extra-deps:
   # - direct-sqlcipher-2.3.26
-  - ../direct-sqlcipher
-  # - github: simplex-chat/direct-sqlcipher
-  #   commit: 355647880bede89afdeb5eb1ae237314db04a56a
+  # - ../direct-sqlcipher
+  - github: simplex-chat/direct-sqlcipher
+    commit: 355647880bede89afdeb5eb1ae237314db04a56a
