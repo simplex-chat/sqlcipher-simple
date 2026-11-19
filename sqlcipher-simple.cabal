@@ -1,5 +1,5 @@
 Name:                sqlcipher-simple
-Version:             0.4.18.1
+Version:             0.4.19.0
 Synopsis:            Mid-Level SQLite client library
 Description:
     Mid-level SQLCipher client library, forked from sqlite-simple.
@@ -16,6 +16,7 @@ Maintainer:          Evgeny Poberezkin <ep@simplex.chat>
 Copyright:           (c) 2011 MailRank, Inc.,
                      (c) 2011-2012 Leon P Smith,
                      (c) 2012-2014 Janne Hellsten
+                     (c) 2022-2026 Joshua Chia
 Homepage:            https://github.com/simplex-chat/sqlcipher-simple
 bug-reports:         https://github.com/simplex-chat/sqlcipher-simple/issues
 Stability:           stable
@@ -23,8 +24,8 @@ Category:            Database
 Build-type:          Simple
 
 Cabal-version:       >= 1.10
-
-extra-source-files:  README.markdown
+tested-with:         GHC == 8.10.7 || == 9.0.2 || == 9.2.8 || == 9.4.8 || == 9.6.7 || == 9.8.4 || == 9.10.3
+extra-source-files:  README.md
                      changelog
 
 Library
@@ -57,7 +58,7 @@ Library
     time,
     transformers,
     Only >= 0.1 && < 0.1.1
-    
+
   if impl(ghc < 8.0)
     Build-depends: semigroups >= 0.18 && < 0.20
 
@@ -94,6 +95,7 @@ test-suite test
                 , TestImports
                 , UserInstances
                 , Utf8Strings
+                , With
 
   ghc-options: -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind
 
