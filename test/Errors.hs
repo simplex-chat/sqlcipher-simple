@@ -67,7 +67,7 @@ testErrorsColumns TestEnv{..} = TestCase $ do
       }
   -- Mismatching types (source int,text doesn't match dst string,int)
   assertResultErrorThrown (query_ conn "SELECT id, t FROM cols" :: IO [(String, Int)])
-    ConversionFailed {errSQLType = "INTEGER", errHaskellType = "[Char]", errMessage = "expecting SQLText column type"}
+    ConversionFailed {errSQLType = "TEXT", errHaskellType = "Int", errMessage = "need an int"}
   -- Mismatching types (source string doesn't match dst integer)
   assertResultErrorThrown (query_ conn "SELECT 'foo'" :: IO [Only Integer])
     ConversionFailed {errSQLType = "TEXT", errHaskellType = "Integer", errMessage = "need an int"}
@@ -85,15 +85,8 @@ testErrorsColumns TestEnv{..} = TestCase $ do
     ConversionFailed {errSQLType = "TEXT", errHaskellType = "Bool", errMessage = "expecting an SQLInteger column type"}
   assertResultErrorThrown (query_ conn "SELECT 2" :: IO [Only Bool])
     ConversionFailed {errSQLType = "INTEGER", errHaskellType = "Bool", errMessage = "bool must be 0 or 1, got 2"}
-  -- Mismatching types (sources don't match destination string types (text, string)
-  assertResultErrorThrown (query_ conn "SELECT 1" :: IO [Only T.Text])
-    ConversionFailed {errSQLType = "INTEGER", errHaskellType = "Text", errMessage = "need a text"}
-  assertResultErrorThrown (query_ conn "SELECT 1" :: IO [Only LT.Text])
-    ConversionFailed {errSQLType = "INTEGER", errHaskellType = "Text", errMessage = "need a text"}
-  assertResultErrorThrown (query_ conn "SELECT 1.0" :: IO [Only T.Text])
-    ConversionFailed {errSQLType = "FLOAT", errHaskellType = "Text", errMessage = "need a text"}
-  assertResultErrorThrown (query_ conn "SELECT 1.0" :: IO [Only LT.Text])
-    ConversionFailed {errSQLType = "FLOAT", errHaskellType = "Text", errMessage = "need a text"}
+  numbers <- query_ conn "SELECT 1, 1.0" :: IO [(T.Text, LT.Text)]
+  [("1", "1.0")] @=? numbers
   -- Mismatching types (sources don't match destination string types (time/date)
   assertResultErrorThrown (query_ conn "SELECT 1" :: IO [Only UTCTime])
     ConversionFailed {errSQLType = "INTEGER", errHaskellType = "UTCTime", errMessage = "expecting SQLText column type"}
@@ -116,7 +109,7 @@ testErrorsColumns TestEnv{..} = TestCase $ do
   assertResultErrorThrown
     (do [Only _t1] <- query conn "SELECT b FROM cols_blobs WHERE id = ?" (Only (1 :: Int)) :: IO [Only String]
         return ())
-    ConversionFailed {errSQLType = "BLOB", errHaskellType = "[Char]", errMessage = "expecting SQLText column type"}
+    ConversionFailed {errSQLType = "BLOB", errHaskellType = "Text", errMessage = "need convertible to text"}
   execute_ conn "CREATE TABLE cols_bools (id INTEGER PRIMARY KEY, b BOOLEAN)"
   -- 3 = invalid value for bool, must be 0 or 1
   execute_ conn "INSERT INTO cols_bools (b) VALUES (3)"
