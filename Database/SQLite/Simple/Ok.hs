@@ -19,7 +19,7 @@
 -- commonly-used type and typeclass included in @base@.
 --
 -- Extending the failure case to a list of 'SomeException's enables a
--- more sensible 'Alternative' instance definitions:   '<|>' concatinates
+-- more sensible 'Alternative' instance definitions:   '<|>' concatenates
 -- the list of exceptions when both cases fail,  and 'empty' is defined as
 -- 'Errors []'.   Though '<|>' one could pick one of two exceptions, and
 -- throw away the other,  and have 'empty' provide a generic exception,
@@ -73,18 +73,17 @@ instance MonadPlus Ok where
     mplus = (<|>)
 
 instance Monad Ok where
-    return = Ok
-
     Errors es >>= _ = Errors es
     Ok a      >>= f = f a
 
 #if MIN_VERSION_base(4,9,0)
 instance MonadFail Ok where
     fail str = Errors [SomeException (ErrorCall str)]
+#endif
 
 instance MonadThrow Ok where
-    throwM = fail . show
-#endif
+    throwM = Errors . pure . toException
+
 
 -- | a way to reify a list of exceptions into a single exception
 
