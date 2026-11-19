@@ -64,9 +64,10 @@ module Database.SQLite.Simple (
     -- * Queries that return results
   , query
   , query_
+  , queryNamed
   , queryWith
   , queryWith_
-  , queryNamed
+  , queryNamedWith
   , lastInsertRowId
   , changes
   , totalChanges
@@ -74,12 +75,16 @@ module Database.SQLite.Simple (
   , fold
   , fold_
   , foldNamed
+  , foldWith
+  , foldWith_
+  , foldNamedWith
     -- * Statements that do not return results
   , execute
-  , execute_
   , executeMany
   , executeNamed
+  , execute_
   , field
+  , returnRowError
     -- * Transactions
   , withTransaction
   , withImmediateTransaction
@@ -244,7 +249,7 @@ bindNamed (Statement stmt) params = do
 reset :: Statement -> IO ()
 reset (Statement stmt) = Base.reset stmt
 
--- | Return the name of a a particular column in the result set of a
+-- | Return the name of a particular column in the result set of a
 -- 'Statement'.  Throws an 'ArrayException' if the colum index is out
 -- of bounds.
 --
@@ -314,27 +319,6 @@ withStatementNamedParams :: Connection
 withStatementNamedParams conn template namedParams action =
   withStatement conn template $ \stmt -> bindNamed stmt namedParams >> action stmt
 
--- | Execute an @INSERT@, @UPDATE@, or other SQL query that is not
--- expected to return results.
---
--- Throws 'FormatError' if the query could not be formatted correctly.
-execute :: (ToRow q) => Connection -> Query -> q -> IO ()
-execute conn template qs =
-  withStatementParams conn template qs $ \(Statement stmt) ->
-    void . Base.step $ stmt
-
--- | Execute a multi-row @INSERT@, @UPDATE@, or other SQL query that is not
--- expected to return results.
---
--- Throws 'FormatError' if the query could not be formatted correctly.
-executeMany :: ToRow q => Connection -> Query -> [q] -> IO ()
-executeMany conn template paramRows = withStatement conn template $ \stmt -> do
-  let Statement stmt' = stmt
-  forM_ paramRows $ \params ->
-    withBind stmt params
-      (void . Base.step $ stmt')
-
-
 doFoldToList :: RowParser row -> Statement -> IO [row]
 doFoldToList fromRow_ stmt =
   fmap reverse $ doFold fromRow_ stmt [] (\acc e -> return (e : acc))
@@ -359,19 +343,8 @@ query = queryWith fromRow
 query_ :: (FromRow r) => Connection -> Query -> IO [r]
 query_ = queryWith_ fromRow
 
--- | A version of 'query' that takes an explicit 'RowParser'.
-queryWith :: (ToRow q) => RowParser r -> Connection -> Query -> q -> IO [r]
-queryWith fromRow_ conn templ qs =
-  withStatementParams conn templ qs $ \stmt -> doFoldToList fromRow_ stmt
-
--- | A version of 'query' that does not perform query substitution and
--- takes an explicit 'RowParser'.
-queryWith_ :: RowParser r -> Connection -> Query -> IO [r]
-queryWith_ fromRow_ conn query =
-  withStatement conn query (doFoldToList fromRow_)
-
--- | A version of 'query' where the query parameters (placeholders)
--- are named.
+-- | A version of 'query' whose query parameters (placeholders) are
+-- named.
 --
 -- Example:
 --
@@ -379,21 +352,24 @@ queryWith_ fromRow_ conn query =
 -- r \<- 'queryNamed' c \"SELECT * FROM posts WHERE id=:id AND date>=:date\" [\":id\" ':=' postId, \":date\" ':=' afterDate]
 -- @
 queryNamed :: (FromRow r) => Connection -> Query -> [NamedParam] -> IO [r]
-queryNamed conn templ params =
-  withStatementNamedParams conn templ params $ \stmt -> doFoldToList fromRow stmt
+queryNamed = queryNamedWith fromRow
 
--- | A version of 'execute' that does not perform query substitution.
-execute_ :: Connection -> Query -> IO ()
-execute_ conn template =
-  withStatement conn template $ \(Statement stmt) ->
-    void $ Base.step stmt
+-- | A version of 'query' that takes an explicit 'RowParser'.
+queryWith :: (ToRow q) => RowParser r -> Connection -> Query -> q -> IO [r]
+queryWith fromRow_ conn templ qs =
+  withStatementParams conn templ qs $ \stmt -> doFoldToList fromRow_ stmt
 
--- | A version of 'execute' where the query parameters (placeholders)
--- are named.
-executeNamed :: Connection -> Query -> [NamedParam] -> IO ()
-executeNamed conn template params =
-  withStatementNamedParams conn template params $ \(Statement stmt) ->
-    void $ Base.step stmt
+-- | A version of 'query' that takes an explicit 'RowParser' and does
+-- not perform query substitution.
+queryWith_ :: RowParser r -> Connection -> Query -> IO [r]
+queryWith_ fromRow_ conn query =
+  withStatement conn query (doFoldToList fromRow_)
+
+-- | A version of 'query' whose query parameters (placeholders) are
+-- named that takes an explicit 'RowParser'.
+queryNamedWith :: RowParser r -> Connection -> Query -> [NamedParam] -> IO [r]
+queryNamedWith fromRow_ conn templ params =
+  withStatementNamedParams conn templ params $ \stmt -> doFoldToList fromRow_ stmt
 
 -- | Perform a @SELECT@ or other SQL query that is expected to return results.
 -- Results are converted and fed into the 'action' callback as they are being
@@ -414,22 +390,18 @@ fold :: ( FromRow row, ToRow params )
         -> a
         -> (a -> row -> IO a)
         -> IO a
-fold conn query params initalState action =
-  withStatementParams conn query params $ \stmt ->
-    doFold fromRow stmt initalState action
+fold = foldWith fromRow
 
--- | A version of 'fold' which does not perform parameter substitution.
+-- | A version of 'fold' that does not perform query substitution.
 fold_ :: ( FromRow row )
         => Connection
         -> Query
         -> a
         -> (a -> row -> IO a)
         -> IO a
-fold_ conn query initalState action =
-  withStatement conn query $ \stmt ->
-    doFold fromRow stmt initalState action
+fold_ = foldWith_ fromRow
 
--- | A version of 'fold' where the query parameters (placeholders) are
+-- | A version of 'fold' whose query parameters (placeholders) are
 -- named.
 foldNamed :: ( FromRow row )
           => Connection
@@ -438,9 +410,45 @@ foldNamed :: ( FromRow row )
           -> a
           -> (a -> row -> IO a)
           -> IO a
-foldNamed conn query params initalState action =
+foldNamed = foldNamedWith fromRow
+
+-- | A version of 'fold' that takes an explicit 'RowParser'.
+foldWith :: ( ToRow params )
+           => RowParser row
+           -> Connection
+           -> Query
+           -> params
+           -> a
+           -> (a -> row -> IO a)
+           -> IO a
+foldWith fromRow_ conn query params initalState action =
+  withStatementParams conn query params $ \stmt ->
+    doFold fromRow_ stmt initalState action
+
+-- | A version of 'fold' that takes an explicit 'RowParser' and does
+-- not perform query substitution.
+foldWith_ :: RowParser row
+          -> Connection
+          -> Query
+          -> a
+          -> (a -> row -> IO a)
+          -> IO a
+foldWith_ fromRow_ conn query initalState action =
+  withStatement conn query $ \stmt ->
+    doFold fromRow_ stmt initalState action
+
+-- | A version of 'fold' whose query parameters (placeholders) are
+-- named that takes an explicit 'RowParser'.
+foldNamedWith :: RowParser row
+              -> Connection
+              -> Query
+              -> [NamedParam]
+              -> a
+              -> (a -> row -> IO a)
+              -> IO a
+foldNamedWith fromRow_ conn query params initalState action =
   withStatementNamedParams conn query params $ \stmt ->
-    doFold fromRow stmt initalState action
+    doFold fromRow_ stmt initalState action
 
 doFold :: RowParser row -> Statement ->  a -> (a -> row -> IO a) -> IO a
 doFold fromRow_ stmt initState action =
@@ -453,6 +461,39 @@ doFold fromRow_ stmt initState action =
           val' <- action val row
           val' `seq` loop val'
         Nothing   -> return val
+
+-- | Execute an @INSERT@, @UPDATE@, or other SQL query that is not
+-- expected to return results.
+--
+-- Throws 'FormatError' if the query could not be formatted correctly.
+execute :: (ToRow q) => Connection -> Query -> q -> IO ()
+execute conn template qs =
+  withStatementParams conn template qs $ \(Statement stmt) ->
+    void . Base.step $ stmt
+
+-- | Execute a multi-row @INSERT@, @UPDATE@, or other SQL query that is not
+-- expected to return results.
+--
+-- Throws 'FormatError' if the query could not be formatted correctly.
+executeMany :: ToRow q => Connection -> Query -> [q] -> IO ()
+executeMany conn template paramRows = withStatement conn template $ \stmt -> do
+  let Statement stmt' = stmt
+  forM_ paramRows $ \params ->
+    withBind stmt params
+      (void . Base.step $ stmt')
+
+-- | A version of 'execute' where the query parameters (placeholders)
+-- are named.
+executeNamed :: Connection -> Query -> [NamedParam] -> IO ()
+executeNamed conn template params =
+  withStatementNamedParams conn template params $ \(Statement stmt) ->
+    void $ Base.step stmt
+
+-- | A version of 'execute' that does not perform query substitution.
+execute_ :: Connection -> Query -> IO ()
+execute_ conn template =
+  withStatement conn template $ \(Statement stmt) ->
+    void $ Base.step stmt
 
 -- | Extracts the next row from the prepared statement.
 nextRow :: (FromRow r) => Statement -> IO (Maybe r)
@@ -806,7 +847,7 @@ getQuery stmt =
 --
 -- Although SQL can accommodate @NULL@ as a value for any of these
 -- types, Haskell cannot. If your result contains columns that may be
--- @NULL@, be sure that you use 'Maybe' in those positions of of your
+-- @NULL@, be sure that you use 'Maybe' in those positions of your
 -- tuple.
 --
 -- > (Text, Maybe Int, Int)
