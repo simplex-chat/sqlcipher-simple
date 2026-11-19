@@ -324,7 +324,7 @@ testErrorsBusyCommit transaction _ = TestCase $ do
         _ <- query_ reader "SELECT id FROM busy" :: IO [Only Int]
         assertBusyThrown insert
       insert
-      [Only n] <- query_ writer "SELECT count(*) FROM busy"
+      [Only n] <- query_ reader "SELECT count(*) FROM busy"
       (1 :: Int) @=? n
 
 testErrorsEndedTransaction :: TestEnv -> Test
