@@ -10,6 +10,8 @@ module Errors (
   , testErrorsImmediateTransaction
   , testErrorsExclusiveTransaction
   , testErrorsSavepoint
+  , testErrorsBusyCommit
+  , testErrorsEndedTransaction
   ) where
 
 import           Control.Exception
@@ -19,6 +21,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import           Data.Word
 import           Data.Time (Day, UTCTime)
+import           System.Directory (getTemporaryDirectory, removeFile)
+import           System.IO (hClose, openTempFile)
 
 import           Common
 import           Database.SQLite.Simple.Types (Null)
@@ -28,6 +32,12 @@ assertResultErrorThrown action expectedError =
   catch
     (action >> assertFailure ("Expected error: " ++ show expectedError ++ ", but nothing was thrown"))
     (\(e :: ResultError) -> assertEqual "assertResultErrorThrown" expectedError e)
+
+assertBusyThrown :: IO a -> Assertion
+assertBusyThrown action =
+  catch
+    (action >> assertFailure "Expected ErrorBusy, but nothing was thrown")
+    (\(e :: SQLError) -> assertEqual "assertBusyThrown" ErrorBusy (sqlError e))
 
 assertFormatErrorCaught :: IO a -> Assertion
 assertFormatErrorCaught action = do
@@ -67,7 +77,7 @@ testErrorsColumns TestEnv{..} = TestCase $ do
       }
   -- Mismatching types (source int,text doesn't match dst string,int)
   assertResultErrorThrown (query_ conn "SELECT id, t FROM cols" :: IO [(String, Int)])
-    ConversionFailed {errSQLType = "INTEGER", errHaskellType = "[Char]", errMessage = "expecting SQLText column type"}
+    ConversionFailed {errSQLType = "TEXT", errHaskellType = "Int", errMessage = "need an int"}
   -- Mismatching types (source string doesn't match dst integer)
   assertResultErrorThrown (query_ conn "SELECT 'foo'" :: IO [Only Integer])
     ConversionFailed {errSQLType = "TEXT", errHaskellType = "Integer", errMessage = "need an int"}
@@ -85,15 +95,8 @@ testErrorsColumns TestEnv{..} = TestCase $ do
     ConversionFailed {errSQLType = "TEXT", errHaskellType = "Bool", errMessage = "expecting an SQLInteger column type"}
   assertResultErrorThrown (query_ conn "SELECT 2" :: IO [Only Bool])
     ConversionFailed {errSQLType = "INTEGER", errHaskellType = "Bool", errMessage = "bool must be 0 or 1, got 2"}
-  -- Mismatching types (sources don't match destination string types (text, string)
-  assertResultErrorThrown (query_ conn "SELECT 1" :: IO [Only T.Text])
-    ConversionFailed {errSQLType = "INTEGER", errHaskellType = "Text", errMessage = "need a text"}
-  assertResultErrorThrown (query_ conn "SELECT 1" :: IO [Only LT.Text])
-    ConversionFailed {errSQLType = "INTEGER", errHaskellType = "Text", errMessage = "need a text"}
-  assertResultErrorThrown (query_ conn "SELECT 1.0" :: IO [Only T.Text])
-    ConversionFailed {errSQLType = "FLOAT", errHaskellType = "Text", errMessage = "need a text"}
-  assertResultErrorThrown (query_ conn "SELECT 1.0" :: IO [Only LT.Text])
-    ConversionFailed {errSQLType = "FLOAT", errHaskellType = "Text", errMessage = "need a text"}
+  numbers <- query_ conn "SELECT 1, 1.0" :: IO [(T.Text, LT.Text)]
+  [("1", "1.0")] @=? numbers
   -- Mismatching types (sources don't match destination string types (time/date)
   assertResultErrorThrown (query_ conn "SELECT 1" :: IO [Only UTCTime])
     ConversionFailed {errSQLType = "INTEGER", errHaskellType = "UTCTime", errMessage = "expecting SQLText column type"}
@@ -116,7 +119,7 @@ testErrorsColumns TestEnv{..} = TestCase $ do
   assertResultErrorThrown
     (do [Only _t1] <- query conn "SELECT b FROM cols_blobs WHERE id = ?" (Only (1 :: Int)) :: IO [Only String]
         return ())
-    ConversionFailed {errSQLType = "BLOB", errHaskellType = "[Char]", errMessage = "expecting SQLText column type"}
+    ConversionFailed {errSQLType = "BLOB", errHaskellType = "Text", errMessage = "need convertible to text"}
   execute_ conn "CREATE TABLE cols_bools (id INTEGER PRIMARY KEY, b BOOLEAN)"
   -- 3 = invalid value for bool, must be 0 or 1
   execute_ conn "INSERT INTO cols_bools (b) VALUES (3)"
@@ -297,6 +300,7 @@ testErrorsSavepoint TestEnv{..} = TestCase $ do
           "INSERT INTO strans (t) VALUES (:txt)" [":missing" := ("foo" :: String)])
   e <- rowExists
   False @=? e
+  withTransaction conn $ return ()
   where
     rowExists = do
       rows <- query_ conn "SELECT t FROM strans" :: IO [Only String]
@@ -307,3 +311,24 @@ testErrorsSavepoint TestEnv{..} = TestCase $ do
         [] ->
           return False
         _ -> error "should have only one row"
+
+testErrorsBusyCommit :: (Connection -> IO () -> IO ()) -> TestEnv -> Test
+testErrorsBusyCommit transaction _ = TestCase $ do
+  dir <- getTemporaryDirectory
+  bracket (openTempFile dir "busy.db") (removeFile . fst) $ \(path, h) -> do
+    hClose h
+    withConnection path $ \writer -> withConnection path $ \reader -> do
+      let insert = transaction writer $ execute_ writer "INSERT INTO busy DEFAULT VALUES"
+      execute_ writer "CREATE TABLE busy (id INTEGER PRIMARY KEY)"
+      withTransaction reader $ do
+        _ <- query_ reader "SELECT id FROM busy" :: IO [Only Int]
+        assertBusyThrown insert
+      insert
+      [Only n] <- query_ reader "SELECT count(*) FROM busy"
+      (1 :: Int) @=? n
+
+testErrorsEndedTransaction :: TestEnv -> Test
+testErrorsEndedTransaction TestEnv{..} = TestCase $
+  catch
+    (withTransaction conn (execute_ conn "ROLLBACK") >> assertFailure "Expected SQLError, but nothing was thrown")
+    (\(e :: SQLError) -> "cannot commit - no transaction is active" @=? sqlErrorDetails e)
