@@ -119,7 +119,7 @@ expectedTypeError =
   ConversionFailed
     { errSQLType = "NULL"
     , errHaskellType = "Text"
-    , errMessage = "need a text"
+    , errMessage = "need convertible to text"
     }
 
 mkTest :: AccessMode -> BindingMode -> Table -> PathKind -> TestEnv -> Test
